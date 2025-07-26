@@ -1,7 +1,10 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, Response
+from datastar_py import ServerSentEventGenerator as SSE, attribute_generator as data
 from dotenv import load_dotenv
 import google.generativeai as genai
 import os
+import asyncio
+from datetime import datetime
 
 load_dotenv()
 
@@ -30,14 +33,11 @@ def questionnaire():
         if not interest:
             flash('Interest is required!', 'danger')
             return redirect(url_for('questionnaire'))
-        session['interest'] = interest
-        session['ancestor_name'] = ancestor_name
-        session['birth_date'] = birth_date
-        return redirect(url_for('simulation'))
-    return render_template('questionnaire.html')
 
 @app.route('/simulation', methods=['GET', 'POST'])
 def simulation():
+    if request.method == 'GET' and session.get('story'):
+        return render_template('simulation.html', story=session.get('story'))
     interest = session.get('interest')
     ancestor_name = session.get('ancestor_name')
     birth_date = session.get('birth_date')
@@ -45,7 +45,7 @@ def simulation():
     user_input = f"""
         I want to explore {interest}.
         My ancestor's name is {ancestor_name or 'unknown'} and they were born around {birth_date or 'an unknown time'}.
-    """
+        """
 
     try:
         model = genai.GenerativeModel("gemini-2.5-pro")
@@ -53,8 +53,18 @@ def simulation():
         convo.send_message(SYSTEM_PROMPT)
         convo.send_message(user_input)
         story = convo.last.text
+        session['story'] = story
     except Exception as e:
         flash(f"Failed to generate story: {str(e)}", 'danger')
         return redirect(url_for('questionnaire'))
 
     return render_template('simulation.html', story=story)
+
+
+@app.route("/updates", methods=['POST'])
+def updates():
+    decision = request.form.get('decision')
+    def event_stream():
+        yield SSE.patch_elements(f"""<span id="decision-1">{decision}</span>""")
+
+    return Response(event_stream(), mimetype="text/event-stream")
