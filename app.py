@@ -1,14 +1,13 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, Response
 from dotenv import load_dotenv
 import google.generativeai as genai
 import os
+import time
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY")
-
-# Now loaded from .env
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 SYSTEM_PROMPT = (
@@ -18,35 +17,40 @@ SYSTEM_PROMPT = (
     "take into account and continue the story, but only three times. After I make three choices, the story wraps up and the simulation ends."
 )
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/', methods=['GET'])
 def questionnaire():
-    story = None
-
-    if request.method == 'POST':
-        interest = request.form.get('interest')
-        ancestor_name = request.form.get('ancestor_name')
-        birth_date = request.form.get('birth_date')
-
-        if not interest:
-            flash('Interest is required!', 'danger')
-            return redirect(url_for('questionnaire'))
-
-        user_input = f"""
-        I want to explore {interest}.
-        My ancestor's name is {ancestor_name or 'unknown'} and they were born around {birth_date or 'an unknown time'}.
-        """
-
-        try:
-            model = genai.GenerativeModel("gemini-2.5-pro")
-            convo = model.start_chat()
-            convo.send_message(SYSTEM_PROMPT)
-            convo.send_message(user_input)
-            story = convo.last.text
-        except Exception as e:
-            flash(f"Failed to generate story: {str(e)}", 'danger')
-            return redirect(url_for('questionnaire'))
-
-        return render_template('questionnaire.html', story=story)
-
     return render_template('questionnaire.html')
+
+
+@app.route('/stream', methods=['POST'])
+def stream():
+    # ✅ Extract data BEFORE starting generator
+    interest = request.form.get('interest')
+    ancestor_name = request.form.get('ancestor_name', 'unknown')
+    birth_date = request.form.get('birth_date', 'an unknown time')
+
+    if not interest:
+        def error_stream():
+            yield f"data: Interest is required!\n\n"
+        return Response(error_stream(), mimetype="text/event-stream")
+
+    user_input = f"""
+    I want to explore {interest}.
+    My ancestor's name is {ancestor_name} and they were born around {birth_date}.
+    """
+
+    def generate():
+        try:
+            model = genai.GenerativeModel("gemini-2.0-flash")  # or "gemini-2.5-pro" if supported
+            chat = model.start_chat()
+            chat.send_message(SYSTEM_PROMPT)
+
+            for chunk in chat.send_message(user_input, stream=True):
+                if chunk.text:
+                    yield f"data: {chunk.text}\n\n"
+        except Exception as e:
+            yield f"data: [Error] {str(e)}\n\n"
+
+    return Response(generate(), mimetype="text/event-stream")
+
 

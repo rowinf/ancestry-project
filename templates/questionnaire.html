@@ -13,48 +13,91 @@
         .flash-messages {
             margin-bottom: 20px;
         }
+        #story-box {
+            white-space: pre-wrap;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <div class="flash-messages">
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }}">{{ message }}</div>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        {% endwith %}
-
-        <h2 class="mb-4">Ancestry Questionnaire</h2>
-        <form method="POST" action="{{ url_for('questionnaire') }}">
-            <div class="mb-3">
-                <label for="interest" class="form-label">Your Interest in Ancestry</label>
-                <textarea class="form-control" id="interest" name="interest" rows="3" required></textarea>
+<div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-messages">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
             </div>
+        {% endif %}
+    {% endwith %}
 
-            <div class="mb-3">
-                <label for="ancestor_name" class="form-label">Ancestor's Name (Optional)</label>
-                <input type="text" class="form-control" id="ancestor_name" name="ancestor_name">
-            </div>
+    <h2 class="mb-4">Ancestry Questionnaire</h2>
+    <form id="stream-form">
+        <div class="mb-3">
+            <label for="interest" class="form-label">Your Interest in Ancestry</label>
+            <textarea class="form-control" id="interest" name="interest" rows="3" required></textarea>
+        </div>
 
-            <div class="mb-3">
-                <label for="birth_date" class="form-label">Ancestor's Birth Date (Optional)</label>
-                <input type="date" class="form-control" id="birth_date" name="birth_date">
-            </div>
+        <div class="mb-3">
+            <label for="ancestor_name" class="form-label">Ancestor's Name (Optional)</label>
+            <input type="text" class="form-control" id="ancestor_name" name="ancestor_name">
+        </div>
 
-            <button type="submit" class="btn btn-primary">Submit</button>
-        </form>
-	{% if story %}
-    		<div class="mt-4 p-3 border rounded bg-light" style="white-space: pre-wrap;">
-       			 <h4>Your Ancestral Simulation Story</h4>
-       				{{ story }}
-   		 </div>
-	{% endif %}
+        <div class="mb-3">
+            <label for="birth_date" class="form-label">Ancestor's Birth Date (Optional)</label>
+            <input type="date" class="form-control" id="birth_date" name="birth_date">
+        </div>
 
+        <button type="submit" class="btn btn-primary">Submit</button>
+    </form>
+
+    <div class="mt-4">
+        <h4>Your Ancestral Simulation Story</h4>
+        <pre id="story-box" class="border p-3 bg-light"></pre>
     </div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const form = document.getElementById("stream-form");
+    const storyBox = document.getElementById("story-box");
+
+    form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        storyBox.textContent = "Generating story...\n";
+
+        const formData = new FormData(form);
+
+        fetch("/stream", {
+            method: "POST",
+            body: formData
+        }).then(response => {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            function read() {
+                reader.read().then(({ done, value }) => {
+                    if (done) return;
+                    const text = decoder.decode(value);
+                    const lines = text.split("\n");
+
+                    lines.forEach(line => {
+                        if (line.startsWith("data: ")) {
+                            const content = line.replace("data: ", "");
+                            storyBox.textContent += content + "\n";
+                        }
+                    });
+
+                    read();
+                });
+            }
+
+            read();
+        }).catch(error => {
+            storyBox.textContent = "Error: " + error.message;
+        });
+    });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+
