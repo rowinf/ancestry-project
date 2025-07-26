@@ -197,8 +197,35 @@ def updates():
 
     return Response(event_stream(), mimetype="text/event-stream")
 
-if __name__ == '__main__':
-    # For local development, create a .env file with:
-    # SECRET_KEY="your_secret_key_here"
-    # GOOGLE_API_KEY="your_gemini_api_key_here"
-    app.run(debug=True)
+
+
+@app.route('/stream', methods=['POST'])
+def stream():
+    interest = request.form.get('interest')
+    ancestor_name = request.form.get('ancestor_name', 'unknown')
+    birth_date = request.form.get('birth_date', 'an unknown time')
+
+    if not interest:
+        def error_stream():
+            yield f"data: Interest is required!\n\n"
+        return Response(error_stream(), mimetype="text/event-stream")
+
+    user_input = f"""
+    I want to explore {interest}.
+    My ancestor's name is {ancestor_name} and they were born around {birth_date}.
+    """
+
+    def generate():
+        try:
+            model = genai.GenerativeModel("gemini-2.0-flash")  # or "gemini-2.5-pro" if supported
+            chat = model.start_chat()
+            chat.send_message(SYSTEM_PROMPT)
+
+            for chunk in chat.send_message(user_input, stream=True):
+                if chunk.text:
+                    yield f"data: {chunk.text}\n\n"
+        except Exception as e:
+            yield f"data: [Error] {str(e)}\n\n"
+
+    return Response(generate(), mimetype="text/event-stream")
+
