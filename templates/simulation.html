@@ -27,7 +27,7 @@
             <span id="decision-1"></span>
         </div>
         <form id="decision" data-on-submit="@post('{{ url_for('updates') }}', {contentType: 'form'})">
-            <input name="decision" type="text">
+            <input name="decision" data-bind-decision type="text">
             <button type="submit">
                 Send
             </button>
