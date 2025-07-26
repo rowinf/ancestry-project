@@ -5,6 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "datastar-py>=0.6.3",
+    "dotenv>=0.9.9",
     "flask>=3.1.1",
     "werkzeug>=3.1.3",
 ]
