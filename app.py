@@ -11,7 +11,6 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY")
 
-# Now loaded from .env
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 SYSTEM_PROMPT = (
@@ -21,7 +20,9 @@ SYSTEM_PROMPT = (
     "take into account and continue the story, but only three times. After I make three choices, the story wraps up and the simulation ends."
 )
 
-@app.route('/', methods=['GET', 'POST'])
+
+
+@app.route('/')
 def questionnaire():
     story = None
 
