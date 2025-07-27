@@ -1,4 +1,4 @@
-# Ancestry Questionnaire
+# Ancestor Project
 
 ## Get started
 

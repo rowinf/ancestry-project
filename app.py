@@ -1,11 +1,13 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, Response
 from datastar_py import ServerSentEventGenerator as SSE, attribute_generator as data
+from datastar_py.consts import ElementPatchMode
 from dotenv import load_dotenv
 import google.generativeai as genai
 import os
 import asyncio
 from datetime import datetime
 import re
+import json
 
 load_dotenv()
 
@@ -20,7 +22,7 @@ SYSTEM_PROMPT = (
     "You are the Animus from Assassin's Creed. You are going to write me into a story involving one of my ancestors. "
     "You will ask me where I want to go in history. From that point on, we enter a simulation mode where you present me "
     "with some context from that part of history along with a couple of choices. "
-    "**Always present choices in the format: 'A) Choice 1 B) Choice 2 C) Choice 3'.** "
+    "Always present choices in the format: 'A) Choice 1 B) Choice 2 C) Choice 3 ---' (no quoted strings)"
     "Every choice I make in the story you will take into account and continue the story, but only three times. "
     "After I make three choices, the story wraps up and the simulation ends. "
     "When the simulation ends, clearly state 'SIMULATION ENDED.' at the very end of the story. "
@@ -31,7 +33,10 @@ SYSTEM_PROMPT = (
 def extract_choices(text):
     # This regex looks for a capital letter followed by ')', then captures the text until
     # another choice starts, or 'SIMULATION ENDED.', or the end of the string.
-    choices = re.findall(r'([A-Z])\)\s(.*?)(?=\s[A-Z]\)|\s*SIMULATION ENDED\.|\Z)', text, re.DOTALL)
+    if 'SIMULATION ENDED' in text:
+        return []
+    token = text.split('---', 2)[-2]
+    choices = re.findall(r'([A-Z])\)\s(.*?)(?=\s[A-Z]\)|\Z)', token, re.DOTALL)
     # Filter out empty choices and clean up whitespace
     return [(key.strip(), value.strip()) for key, value in choices if key and value]
 
@@ -100,7 +105,7 @@ def simulation():
     choices = extract_choices(initial_story_segment)
     return render_template('simulation.html', story=initial_story_segment, choices=choices, choice_count=choice_count)
 
-@app.route("/updates", methods=['POST'])
+@app.route("/updates", methods=['GET', 'POST'])
 def updates():
     """
     Handles user decisions during the simulation.
@@ -116,84 +121,89 @@ def updates():
     choices_html = ""
     simulation_ended = False
 
-    # Re-initialize the model and conversation with history to maintain context
-    # Note: If convo_history is empty, start_chat() will still work, but it means
-    # the history wasn't properly saved or the session was reset.
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    convo = model.start_chat(history=convo_history)
+    def build_choices_html(choices):
+        content = ""
+        if choices:
+            content += '<fieldset id="decision-fieldset">'
+            for key, value in choices:
+                # Use data-on-click to send the full choice text as the decision
+                # Ensure value is properly escaped if it contains quotes
+                escaped_value = json.dumps(key + ' ' + value.replace('\'', '').replace("\"", ''))
+                action = "@post('/updates', {contentType:'form'})"
+                content += f"""
+                <label>
+                <input type="radio" class="btn btn-secondary me-2 mb-2" name="decision" id="{key[0]}_{choice_count}" value={escaped_value} data-on-click="{action}"></input>
+                {key} {value}
+                </label>
+                """
+            content += '</fieldset>'
+        return content
 
-
-    if choice_count < 3:
-        try:
-            convo.send_message(decision)
-            new_story_segment = convo.last.text
-            session['story'] = current_story + "\n\n" + new_story_segment # Append to cumulative story
-            session['choice_count'] = choice_count + 1
-
-            # Corrected: Update convo_history by extracting text from parts
-            session['convo_history'] = [{"role": m.role, "parts": [{"text": part.text} for part in m.parts]} for m in convo.history]
-
-            if "SIMULATION ENDED." in new_story_segment.upper(): # Check for end phrase
-                simulation_ended = True
-            elif session['choice_count'] >= 3: # Force end if 3 choices made, regardless of model output
-                new_story_segment += "\n\nSIMULATION ENDED."
-                simulation_ended = True
-            else:
-                # Extract new choices for the next turn
-                choices = extract_choices(new_story_segment)
-                if choices:
-                    choices_html = "<p>Your choices:</p>"
-                    for key, value in choices:
-                        # Use data-on-click to send the full choice text as the decision
-                        # Ensure value is properly escaped if it contains quotes
-                        escaped_value = value.replace("'", "\\'") # Simple escape for single quotes
-                        choices_html += f"""
-                        <button class="btn btn-secondary me-2 mb-2"
-                                data-on-click="@post('{url_for('updates')}', {{contentType: 'form', body: {{decision: '{key}) {escaped_value}'}}}})">{key}) {value}</button>
-                        """
-                else:
-                    # Fallback if model doesn't provide choices but simulation isn't over
-                    choices_html = "<p>Please type your next action or choice:</p>"
-
-        except Exception as e:
-            new_story_segment = f"\n\nError continuing story: {str(e)}. Simulation ended due to an unexpected error."
-            simulation_ended = True
-            session['story'] = current_story + new_story_segment
-            session['choice_count'] = 3 # Force end due to error
-
+    if request.method == 'GET':
+        choices = extract_choices(current_story)
+        choices_html = build_choices_html(choices)
     else:
-        # If 3 choices already made or simulation was already ended
-        new_story_segment = "\n\nSIMULATION ENDED. (No more choices allowed.)"
-        simulation_ended = True
+        # Re-initialize the model and conversation with history to maintain context
+        # Note: If convo_history is empty, start_chat() will still work, but it means
+        # the history wasn't properly saved or the session was reset.
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        convo = model.start_chat(history=convo_history)
+
+
+        if choice_count < 3:
+            try:
+                convo.send_message(decision)
+                new_story_segment = convo.last.text
+                session['story'] = current_story + "\n\n" + new_story_segment # Append to cumulative story
+                session['choice_count'] = choice_count + 1
+
+                # Corrected: Update convo_history by extracting text from parts
+                session['convo_history'] = [{"role": m.role, "parts": [{"text": part.text} for part in m.parts]} for m in convo.history]
+
+                if "SIMULATION ENDED." in new_story_segment.upper(): # Check for end phrase
+                    simulation_ended = True
+                elif session['choice_count'] >= 3: # Force end if 3 choices made, regardless of model output
+                    new_story_segment += "\n\nSIMULATION ENDED."
+                    simulation_ended = True
+                else:
+                    # Extract new choices for the next turn
+                    choices = extract_choices(new_story_segment)
+                    choices_html = build_choices_html(choices)
+
+            except Exception as e:
+                new_story_segment = f"\n\nError continuing story: {str(e)}. Simulation ended due to an unexpected error."
+                simulation_ended = True
+                session['story'] = current_story + new_story_segment
+                session['choice_count'] = 3 # Force end due to error
+
+        else:
+            # If 3 choices already made or simulation was already ended
+            new_story_segment = "\n\nSIMULATION ENDED. (No more choices allowed.)"
+            simulation_ended = True
 
     # SSE stream generation
     def event_stream():
         # Append the new story segment to the story display
-        yield SSE.patch_elements(f"""<div id="story-content" hx-swap-oob="beforeend">{new_story_segment}</div>""")
+        if new_story_segment:
+            yield SSE.patch_elements(f"""<div id="story-content">{new_story_segment}</div>""")
 
         if simulation_ended:
             # Replace the choices container with the end message and restart button
             yield SSE.patch_elements(f"""
-                <div id="choices-container" class="choices-container" hx-swap-oob="true">
+                <div id="choices-container" class="choices-container">
                     <p class="mt-4 text-center">SIMULATION ENDED. Thank you for playing!</p>
                     <div class="d-flex justify-content-center">
-                        <button class="btn btn-success" data-on-click="window.location.href='{url_for('questionnaire')}'">Start New Simulation</button>
+                        <button class="btn btn-success" data-on-click="window.location.href='/'">Start New Simulation</button>
                     </div>
                 </div>
             """)
         else:
             # Update the choices container with new choices and the input field
-            yield SSE.patch_elements(f"""
-                <div id="choices-container" class="choices-container" hx-swap-oob="true">
-                    {choices_html}
-                    <form id="decision-form" data-on-submit="@post('{url_for('updates')}', {{contentType: 'form'}})">
-                        <input name="decision" data-bind-decision type="text" class="form-control mb-2" placeholder="Type your choice (e.g., A, B, or full text)">
-                        <button type="submit" class="btn btn-primary">Send</button>
-                    </form>
-                </div>
-            """)
-        # Clear the input field after submission by patching its value
-        yield SSE.patch_elements(f"""<input name="decision" data-bind-decision value="" hx-swap-oob="true">""")
+            yield SSE.patch_elements(
+                choices_html,
+                selector="#decision-form",
+                mode=ElementPatchMode.INNER
+            )
 
     return Response(event_stream(), mimetype="text/event-stream")
 
