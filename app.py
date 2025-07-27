@@ -131,10 +131,12 @@ def updates():
                 escaped_value = json.dumps(key + ' ' + value.replace('\'', '').replace("\"", ''))
                 action = "@post('/updates', {contentType:'form'})"
                 content += f"""
-                <label>
-                <input type="radio" class="btn btn-secondary me-2 mb-2" name="decision" id="{key[0]}_{choice_count}" value={escaped_value} data-on-click="{action}"></input>
+                <div class="form-check">
+                <label class="form-check-label">
+                <input type="radio" class="form-check-input" name="decision" id="{key[0]}_{choice_count}" value={escaped_value} data-on-click="{action}"></input>
                 {key} {value}
                 </label>
+                </div>
                 """
             content += '</fieldset>'
         return content
