@@ -1,9 +1,60 @@
 {% extends "base.html" %}
 
+{% block head %}
+<style>
+.arrow-container {
+  position: relative;
+  width: 70px;
+  height: 0;
+}
+.arrow-up { 
+  width: 0; 
+  height: 0; 
+  border-left: 45px solid transparent;
+  border-right: 45px solid transparent;
+  
+  border-bottom: 75px solid whitesmoke;
+  filter: drop-shadow(3px 3px rebeccapurple) sepia(15%) drop-shadow(-3px -3px cyan);
+}
+.arrow-up::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: -75px;
+  width: 0;
+  height: 0;
+  border-left: 75px solid transparent;
+  border-right: 75px solid transparent;
+  border-bottom: 75px solid cyan;
+  filter: blur(20px);
+  opacity: 0.2;
+  z-index: 1;
+}
+.glow-circle {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 50px #fff,
+    inset 20px 0 80px #f0f,
+    inset -20px 0 80px #0ff,
+    inset 20px 0 300px #f0f,
+    inset -20px 0 300px #0ff,
+    0 0 50px #fff,
+    -10px 0 80px #f0f,
+    10px 0 80px #0ff;
+}
+</style>
+{% endblock %}
+
 {% block content %}
     <div class="cover-container d-flex w-100 vh-100 p-3 mx-auto flex-column">
-        <header class="mb-5 text-center">
-            <h1>Ancestor Project (The Animus)</h1>
+        <header class="m-5 text-end text-sm-center">
+            <div class="glow-circle"></div>
+            <div class="arrow-container">
+                <div class="arrow-up"></div>
+            </div>
+            <h1>Ancestor Project<br /> (The Animus)</h1>
         </header>
         <main>
             <div class="text-center d-flex flex-column align-items-center justify-content-center">  
@@ -17,6 +68,10 @@
 
         </main>
     </div>
+
+    
+
+    
 
     <div class="cover-container d-flex w-100 vh-100 p-3 mx-auto flex-column" id="questionnaire">
         {% with messages = get_flashed_messages(with_categories=true) %}
