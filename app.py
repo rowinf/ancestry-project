@@ -4,83 +4,79 @@ from datastar_py.consts import ElementPatchMode
 from dotenv import load_dotenv
 import google.generativeai as genai
 import os
-import asyncio
-from datetime import datetime
 import re
 import json
+from datetime import timedelta
 
 load_dotenv()
 
 app = Flask(__name__)
-# Ensure you have a SECRET_KEY in your .env file for session management
-app.secret_key = os.getenv("SECRET_KEY")
 
-# Ensure you have GOOGLE_API_KEY in your .env file
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+# Security: Ensure SECRET_KEY is set
+app.secret_key = os.getenv("SECRET_KEY")
+if not app.secret_key:
+    raise ValueError("SECRET_KEY environment variable is required. Please set it in your .env file.")
+
+# Basic session security configuration
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+# Configure Google Generative AI
+google_api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+if not google_api_key:
+    raise ValueError("GOOGLE_API_KEY or GEMINI_API_KEY environment variable is required. Please set it in your .env file.")
+
+genai.configure(api_key=google_api_key)
 
 SYSTEM_PROMPT = (
     "You are the Animus from Assassin's Creed. You are going to write me into a story involving one of my ancestors. "
     "You will ask me where I want to go in history. From that point on, we enter a simulation mode where you present me "
     "with some context from that part of history along with a couple of choices. "
-    "Always present choices in the format: 'A) Choice 1 B) Choice 2 C) Choice 3 ---' (no quoted strings)"
+    "After each story segment, present exactly 3 choices in this format: "
+    "A) Choice 1 B) Choice 2 C) Choice 3 --- "
     "Every choice I make in the story you will take into account and continue the story, but only three times. "
     "After I make three choices, the story wraps up and the simulation ends. "
-    "When the simulation ends, clearly state 'SIMULATION ENDED.' at the very end of the story. "
-    "Ensure your responses are engaging and continue the narrative seamlessly based on user choices."
+    "When the simulation ends, clearly state 'SIMULATION ENDED.' at the very end of the story."
 )
-
-# Function to extract choices from the story text (e.g., "A) Option 1 B) Option 2")
-def extract_choices(text):
-    # This regex looks for a capital letter followed by ')', then captures the text until
-    # another choice starts, or 'SIMULATION ENDED.', or the end of the string.
-    if 'SIMULATION ENDED' in text:
-        return []
-    token = text.split('---', 2)[-2]
-    choices = re.findall(r'([A-Z])\)\s(.*?)(?=\s[A-Z]\)|\Z)', token, re.DOTALL)
-    # Filter out empty choices and clean up whitespace
-    return [(key.strip(), value.strip()) for key, value in choices if key and value]
 
 @app.route('/', methods=['GET', 'POST'])
 def questionnaire():
-    """
-    Handles the initial questionnaire to gather user's ancestry interest.
-    Initializes session variables for the simulation.
-    """
     if request.method == 'POST':
-        interest = request.form.get('interest')
-        ancestor_name = request.form.get('ancestor_name')
+        interest = request.form.get('interest', '').strip()
+        ancestor_name = request.form.get('ancestor_name', '').strip()
         birth_date = request.form.get('birth_date')
 
         if not interest:
             flash('Your interest in ancestry is required!', 'danger')
             return redirect(url_for('questionnaire'))
 
-        # Save data to session and initialize simulation state
+        # Save data to session
         session['interest'] = interest
         session['ancestor_name'] = ancestor_name
         session['birth_date'] = birth_date
-        session['choice_count'] = 0 # Track how many choices the user has made
-        session['story'] = "" # Stores the cumulative story text
-        session['convo_history'] = [] # Stores the raw conversation history for the model
+        session['choice_count'] = 0
+        session['story'] = ""
+        session['convo_history'] = []
 
         return redirect(url_for('simulation'))
 
-    # For GET method, render the questionnaire form
     return render_template('questionnaire.html')
 
 @app.route('/simulation', methods=['GET'])
 def simulation():
-    """
-    Initiates or continues the Animus simulation.
-    Generates the initial story segment based on questionnaire data.
-    """
     interest = session.get('interest')
     ancestor_name = session.get('ancestor_name')
     birth_date = session.get('birth_date')
     current_story = session.get('story')
     choice_count = session.get('choice_count', 0)
 
-    if not current_story: # Only generate initial story if not already present
+    if not interest:
+        flash('Please complete the questionnaire first.', 'warning')
+        return redirect(url_for('questionnaire'))
+
+    if not current_story:
         user_input = f"""
         I want to explore {interest}.
         My ancestor's name is {ancestor_name or 'unknown'} and they were born around {birth_date or 'an unknown time'}.
@@ -93,25 +89,24 @@ def simulation():
             initial_story_segment = convo.last.text
 
             session['story'] = initial_story_segment
-            # Corrected: Store conversation history by extracting text from parts
-            session['convo_history'] = [{"role": m.role, "parts": [{"text": part.text} for part in m.parts]} for m in convo.history]
+            # Convert conversation history to simple format for session storage
+            session['convo_history'] = [
+                {"role": m.role, "parts": [{"text": part.text} for part in m.parts]} 
+                for m in convo.history
+            ]
 
         except Exception as e:
             flash(f"Failed to generate story: {str(e)}. Please try again.", 'danger')
             return redirect(url_for('questionnaire'))
     else:
-        initial_story_segment = current_story # Use existing story if already in session
+        initial_story_segment = current_story
 
     choices = extract_choices(initial_story_segment)
+
     return render_template('simulation.html', story=initial_story_segment, choices=choices, choice_count=choice_count)
 
 @app.route("/updates", methods=['GET', 'POST'])
 def updates():
-    """
-    Handles user decisions during the simulation.
-    Sends the decision to the AI model, gets the next story segment,
-    and streams updates back to the client using SSE.
-    """
     decision = request.form.get('decision')
     current_story = session.get('story', '')
     choice_count = session.get('choice_count', 0)
@@ -126,15 +121,13 @@ def updates():
         if choices:
             content += '<fieldset id="decision-fieldset">'
             for key, value in choices:
-                # Use data-on-click to send the full choice text as the decision
-                # Ensure value is properly escaped if it contains quotes
                 escaped_value = json.dumps(key + ' ' + value.replace('\'', '').replace("\"", ''))
                 action = "@post('/updates', {contentType:'form'})"
                 content += f"""
                 <div class="form-check">
                 <label class="form-check-label">
-                <input type="radio" class="form-check-input" name="decision" id="{key[0]}_{choice_count}" value={escaped_value} data-on-click="{action}"></input>
-                {key} {value}
+                <input type="radio" class="form-check-input" name="decision" id="{key}_{choice_count}" value={escaped_value} data-on-click="{action}"></input>
+                {key}) {value}
                 </label>
                 </div>
                 """
@@ -145,30 +138,27 @@ def updates():
         choices = extract_choices(current_story)
         choices_html = build_choices_html(choices)
     else:
-        # Re-initialize the model and conversation with history to maintain context
-        # Note: If convo_history is empty, start_chat() will still work, but it means
-        # the history wasn't properly saved or the session was reset.
         model = genai.GenerativeModel("gemini-2.0-flash")
         convo = model.start_chat(history=convo_history)
-
 
         if choice_count < 3:
             try:
                 convo.send_message(decision)
                 new_story_segment = convo.last.text
-                session['story'] = current_story + "\n\n" + new_story_segment # Append to cumulative story
+                session['story'] = current_story + "\n\n" + new_story_segment
                 session['choice_count'] = choice_count + 1
+                # Convert conversation history to simple format for session storage
+                session['convo_history'] = [
+                    {"role": m.role, "parts": [{"text": part.text} for part in m.parts]} 
+                    for m in convo.history
+                ]
 
-                # Corrected: Update convo_history by extracting text from parts
-                session['convo_history'] = [{"role": m.role, "parts": [{"text": part.text} for part in m.parts]} for m in convo.history]
-
-                if "SIMULATION ENDED." in new_story_segment.upper(): # Check for end phrase
+                if "SIMULATION ENDED." in new_story_segment.upper():
                     simulation_ended = True
-                elif session['choice_count'] >= 3: # Force end if 3 choices made, regardless of model output
+                elif session['choice_count'] >= 3:
                     new_story_segment += "\n\nSIMULATION ENDED."
                     simulation_ended = True
                 else:
-                    # Extract new choices for the next turn
                     choices = extract_choices(new_story_segment)
                     choices_html = build_choices_html(choices)
 
@@ -176,21 +166,17 @@ def updates():
                 new_story_segment = f"\n\nError continuing story: {str(e)}. Simulation ended due to an unexpected error."
                 simulation_ended = True
                 session['story'] = current_story + new_story_segment
-                session['choice_count'] = 3 # Force end due to error
+                session['choice_count'] = 3
 
         else:
-            # If 3 choices already made or simulation was already ended
             new_story_segment = "\n\nSIMULATION ENDED. (No more choices allowed.)"
             simulation_ended = True
 
-    # SSE stream generation
     def event_stream():
-        # Append the new story segment to the story display
         if new_story_segment:
             yield SSE.patch_elements(f"""<div id="story-content">{new_story_segment}</div>""")
 
         if simulation_ended:
-            # Replace the choices container with the end message and restart button
             yield SSE.patch_elements(f"""
                 <div id="choices-container" class="choices-container">
                     <p class="mt-4 text-center">SIMULATION ENDED. Thank you for playing!</p>
@@ -200,7 +186,6 @@ def updates():
                 </div>
             """)
         else:
-            # Update the choices container with new choices and the input field
             yield SSE.patch_elements(
                 choices_html,
                 selector="#decision-form",
@@ -208,8 +193,6 @@ def updates():
             )
 
     return Response(event_stream(), mimetype="text/event-stream")
-
-
 
 @app.route('/stream', methods=['POST'])
 def stream():
@@ -229,7 +212,7 @@ def stream():
 
     def generate():
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash")  # or "gemini-2.5-pro" if supported
+            model = genai.GenerativeModel("gemini-2.0-flash")
             chat = model.start_chat()
             chat.send_message(SYSTEM_PROMPT)
 
@@ -240,4 +223,26 @@ def stream():
             yield f"data: [Error] {str(e)}\n\n"
 
     return Response(generate(), mimetype="text/event-stream")
+
+def extract_choices(text):
+    if not text or 'SIMULATION ENDED' in text.upper():
+        return []
+    
+    # Split by '---' and get the last part
+    parts = text.split('---')
+    if len(parts) >= 2:
+        token = parts[-1]
+    else:
+        token = text
+    
+    # Look for choices in the format A) Choice B) Choice C) Choice
+    choices = re.findall(r'([A-Z])\)\s*(.*?)(?=\s*[A-Z]\)|\Z)', token, re.DOTALL)
+    
+    # Filter out empty choices and clean up whitespace
+    result = [(key.strip(), value.strip()) for key, value in choices if key and value]
+    
+    return result
+
+
+
 
