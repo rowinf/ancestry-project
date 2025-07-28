@@ -22,6 +22,48 @@
         .form-control {
             font-size: 1.2rem;
         }
+        .arrow-container {
+            position: relative;
+            width: 70px;
+            height: 0;
+        }
+        .arrow-up { 
+            width: 0; 
+            height: 0; 
+            border-left: 45px solid transparent;
+            border-right: 45px solid transparent;
+
+            border-bottom: 75px solid whitesmoke;
+            filter: drop-shadow(3px 3px mediumorchid) drop-shadow(-3px -3px cyan);
+        }
+        .arrow-up::before {
+            content: "";
+            position: absolute;
+            top: -10px;
+            left: -75px;
+            width: 0;
+            height: 0;
+            border-left: 75px solid transparent;
+            border-right: 75px solid transparent;
+            border-bottom: 75px solid cyan;
+            filter: blur(20px);
+            opacity: 0.2;
+            z-index: 1;
+        }
+        .glow-circle {
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            box-shadow:
+            inset 0 0 50px whitesmoke,
+            inset 20px 0 80px mediumorchid,
+            inset -20px 0 80px mediumorchid,
+            inset 20px 0 300px mediumorchid,
+            inset -20px 0 300px mediumorchid,
+            0 0 50px whitesmoke,
+            -10px 0 80px mediumorchid,
+            10px 0 80px mediumorchid; 
+        }
     </style>
     {% block head %}{% endblock %}
 </head>
