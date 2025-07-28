@@ -1,5 +1,5 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, Response
-from datastar_py import ServerSentEventGenerator as SSE, attribute_generator as data
+from quart import Quart, render_template, request, redirect, url_for, flash, session, Response
+from datastar_py.quart import ServerSentEventGenerator as SSE, DatastarResponse
 from datastar_py.consts import ElementPatchMode
 from dotenv import load_dotenv
 import google.generativeai as genai
@@ -10,7 +10,7 @@ from datetime import timedelta
 
 load_dotenv()
 
-app = Flask(__name__)
+app = Quart(__name__)
 
 # Security: Ensure SECRET_KEY is set
 app.secret_key = os.getenv("SECRET_KEY")
@@ -42,11 +42,12 @@ SYSTEM_PROMPT = (
 )
 
 @app.route('/', methods=['GET', 'POST'])
-def questionnaire():
+async def questionnaire():
     if request.method == 'POST':
-        interest = request.form.get('interest', '').strip()
-        ancestor_name = request.form.get('ancestor_name', '').strip()
-        birth_date = request.form.get('birth_date')
+        form = await request.form
+        interest = form.get('interest', '').strip()
+        ancestor_name = form.get('ancestor_name', '').strip()
+        birth_date = form.get('birth_date')
 
         if not interest:
             flash('Your interest in ancestry is required!', 'danger')
@@ -62,19 +63,19 @@ def questionnaire():
 
         return redirect(url_for('simulation'))
 
-    return render_template('questionnaire.html')
+    return await render_template('questionnaire.html')
 
 @app.route('/simulation', methods=['GET'])
-def simulation():
+async def simulation():
     interest = session.get('interest')
     ancestor_name = session.get('ancestor_name')
     birth_date = session.get('birth_date')
     current_story = session.get('story')
-    choice_count = session.get('choice_count', 0)
+    choice_count = session.get('choice_count', 1)
 
     if not interest:
         flash('Please complete the questionnaire first.', 'warning')
-        return redirect(url_for('questionnaire'))
+        return await redirect(url_for('questionnaire'))
 
     if not current_story:
         user_input = f"""
@@ -91,25 +92,26 @@ def simulation():
             session['story'] = initial_story_segment
             # Convert conversation history to simple format for session storage
             session['convo_history'] = [
-                {"role": m.role, "parts": [{"text": part.text} for part in m.parts]} 
+                {"role": m.role, "parts": [{"text": part.text} for part in m.parts]}
                 for m in convo.history
             ]
 
         except Exception as e:
             flash(f"Failed to generate story: {str(e)}. Please try again.", 'danger')
-            return redirect(url_for('questionnaire'))
+            return await redirect(url_for('questionnaire'))
     else:
         initial_story_segment = current_story
 
     choices = extract_choices(initial_story_segment)
 
-    return render_template('simulation.html', story=initial_story_segment, choices=choices, choice_count=choice_count)
+    return await render_template('simulation.html', story=initial_story_segment, choices=choices, choice_count=choice_count)
 
 @app.route("/updates", methods=['GET', 'POST'])
-def updates():
-    decision = request.form.get('decision')
+async def updates():
+    form = await request.form
+    decision = form.get('decision')
     current_story = session.get('story', '')
-    choice_count = session.get('choice_count', 0)
+    choice_count = session.get('choice_count', 1)
     convo_history = session.get('convo_history', [])
 
     new_story_segment = ""
@@ -121,12 +123,12 @@ def updates():
         if choices:
             content += '<fieldset id="decision-fieldset">'
             for key, value in choices:
-                escaped_value = json.dumps(key + ' ' + value.replace('\'', '').replace("\"", ''))
+                escaped_value = json.dumps(f"{str(choice_count)}: {key} {value.replace('\'', '').replace("\"", '')}")
                 action = "@post('/updates', {contentType:'form'})"
                 content += f"""
                 <div class="form-check">
                 <label class="form-check-label">
-                <input type="radio" class="form-check-input" name="decision" id="{key}_{choice_count}" value={escaped_value} data-on-click="{action}"></input>
+                <input type="radio" class="form-check-input" name="decision" id="{key}_{choice_count}" value={escaped_value} data-on-click="{action}" data-indicator-fetching></input>
                 {key}) {value}
                 </label>
                 </div>
@@ -135,7 +137,9 @@ def updates():
         return content
 
     if request.method == 'GET':
+        print(current_story)
         choices = extract_choices(current_story)
+        print(choices)
         choices_html = build_choices_html(choices)
     else:
         model = genai.GenerativeModel("gemini-2.0-flash")
@@ -149,7 +153,7 @@ def updates():
                 session['choice_count'] = choice_count + 1
                 # Convert conversation history to simple format for session storage
                 session['convo_history'] = [
-                    {"role": m.role, "parts": [{"text": part.text} for part in m.parts]} 
+                    {"role": m.role, "parts": [{"text": part.text} for part in m.parts]}
                     for m in convo.history
                 ]
 
@@ -172,7 +176,7 @@ def updates():
             new_story_segment = "\n\nSIMULATION ENDED. (No more choices allowed.)"
             simulation_ended = True
 
-    def event_stream():
+    async def event_stream():
         if new_story_segment:
             yield SSE.patch_elements(f"""<div id="story-content">{new_story_segment}</div>""")
 
@@ -192,55 +196,26 @@ def updates():
                 mode=ElementPatchMode.INNER
             )
 
-    return Response(event_stream(), mimetype="text/event-stream")
-
-@app.route('/stream', methods=['POST'])
-def stream():
-    interest = request.form.get('interest')
-    ancestor_name = request.form.get('ancestor_name', 'unknown')
-    birth_date = request.form.get('birth_date', 'an unknown time')
-
-    if not interest:
-        def error_stream():
-            yield f"data: Interest is required!\n\n"
-        return Response(error_stream(), mimetype="text/event-stream")
-
-    user_input = f"""
-    I want to explore {interest}.
-    My ancestor's name is {ancestor_name} and they were born around {birth_date}.
-    """
-
-    def generate():
-        try:
-            model = genai.GenerativeModel("gemini-2.0-flash")
-            chat = model.start_chat()
-            chat.send_message(SYSTEM_PROMPT)
-
-            for chunk in chat.send_message(user_input, stream=True):
-                if chunk.text:
-                    yield f"data: {chunk.text}\n\n"
-        except Exception as e:
-            yield f"data: [Error] {str(e)}\n\n"
-
-    return Response(generate(), mimetype="text/event-stream")
+    return DatastarResponse(event_stream())
 
 def extract_choices(text):
     if not text or 'SIMULATION ENDED' in text.upper():
         return []
-    
+
     # Split by '---' and get the last part
     parts = text.split('---')
     if len(parts) >= 2:
         token = parts[-1]
+        if token.strip() == "":
+            token = parts[-2]
     else:
         token = text
-    
     # Look for choices in the format A) Choice B) Choice C) Choice
     choices = re.findall(r'([A-Z])\)\s*(.*?)(?=\s*[A-Z]\)|\Z)', token, re.DOTALL)
-    
+
     # Filter out empty choices and clean up whitespace
     result = [(key.strip(), value.strip()) for key, value in choices if key and value]
-    
+
     return result
 
 
