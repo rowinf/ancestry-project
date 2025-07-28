@@ -37,7 +37,7 @@ SYSTEM_PROMPT = (
     "You will ask me where I want to go in history. From that point on, we enter a simulation mode where you present me "
     "with some context from that part of history along with a couple of choices. "
     "After each story segment, present exactly 3 choices in this format: "
-    "A) Choice B) Choice C) Choice --- "
+    "~~~ A) Choice B) Choice C) Choice --- "
     "My choices indicate the simulation's progress in (parentheses)"
 )
 
@@ -103,7 +103,7 @@ async def simulation():
 
     choices = extract_choices(initial_story_segment)
 
-    return await render_template('simulation.html', story=initial_story_segment, choices=choices)
+    return await render_template('simulation.html', story=extract_story(initial_story_segment), choices=choices)
 
 @app.route("/updates", methods=['GET', 'POST'])
 async def updates():
@@ -148,12 +148,11 @@ async def updates():
         choices = extract_choices(current_story)
         choices_html = build_choices_html(choices)
     else:
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")
         convo = model.start_chat(history=convo_history)
 
         if choice_count <= MAX_CHOICES:
             try:
-                print(decision)
                 convo.send_message(decision)
                 new_story_segment = convo.last.text
                 session['story'] = new_story_segment
@@ -186,7 +185,7 @@ async def updates():
 
     async def event_stream():
         if new_story_segment:
-            yield SSE.patch_elements(f"""<div id="story-content">{new_story_segment}</div>""")
+            yield SSE.patch_elements(f"""<div id="story-content">{extract_story(new_story_segment)}</div>""")
 
         if simulation_ended:
             yield SSE.patch_elements(f"""
@@ -205,6 +204,10 @@ async def updates():
             )
 
     return DatastarResponse(event_stream())
+
+def extract_story(text):
+    return text.split('~~~')[0]
+
 
 def extract_choices(text):
     if not text or END_SIMULATION in text.upper():
