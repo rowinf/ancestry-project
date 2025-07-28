@@ -1,29 +1,30 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <div class="cover-container d-flex w-100 vh-100 p-3 mx-auto flex-column">
-        <header class="m-5 text-end text-sm-center">
-            <div class="glow-circle"></div>
-            <div class="arrow-container">
-                <div class="arrow-up"></div>
-            </div>
-            <h1>Ancestor Project<br /> (The Animus)</h1>
-        </header>
-        <main>
-            <div class="text-center d-flex flex-column align-items-center justify-content-center">
-                <h2>Step into a past life, relive ancestral memories</h2>
-                <p class="lead">What if the key to finding yourself and your people lies with understanding your ancestors?</p>
-                <p class="lead">Ancestor Project (The Animus) is a short interactive ancestor simulation inspired by Assassin's Creed.</p>
-                <p class="lead">Enter a meaningful event from the past, along with a name, and birth date of an ancestor that lived through it, and prepare yourself.</p>
+<div class="cover-container d-flex w-100 vh-100 p-3 mx-auto flex-column">
+    <header class="m-5 text-end text-sm-center">
+        <div class="glow-circle"></div>
+        <div class="arrow-container">
+            <div class="arrow-up"></div>
+        </div>
+        <h1>Ancestor Project<br /> (The Animus)</h1>
+    </header>
+    <main>
+        <div class="text-center d-flex flex-column align-items-center justify-content-center">
+            <h2>Step into a past life, relive ancestral memories</h2>
+            <p class="lead">What if the key to finding yourself and your people lies with understanding your ancestors?</p>
+            <p class="lead">Ancestor Project (The Animus) is a short interactive ancestor simulation inspired by Assassin's Creed.</p>
+            <p class="lead">Enter a meaningful event from the past, along with a name, and birth date of an ancestor that lived through it, and prepare yourself.</p>
 
-                <button class="btn btn-primary" onclick="document.getElementById('questionnaire').scrollIntoView({behavior:'smooth', block:'start'});">
-                    Start your simulation.
-                </button>
-            </div>
-        </main>
-    </div>
+            <button class="btn btn-primary" onclick="document.getElementById('questionnaire').scrollIntoView({behavior:'smooth', block:'start'});">
+                Start your simulation.
+            </button>
+        </div>
+    </main>
+</div>
 
-    <div class="cover-container d-flex w-100 vh-100 p-3 mx-auto flex-column" id="questionnaire">
+<div class="container-fluid d-flex w-100 vh-100 p-5 mx-auto gap-4" id="questionnaire">
+    <div class="w-50">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
         <div class="flash-messages">
@@ -54,4 +55,21 @@
             <button type="submit" class="btn btn-primary">Submit</button>
         </form>
     </div>
+
+    <div class="w-50">
+        <h2>Precomiled Simulation Data</h2>
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+                Airplane mechanic WW2 pacific theater<br>
+                Lloyd Irwin<br>
+                December 7, 1917
+            </li>
+            <li class="list-group-item">
+                Union Soldier 1861<br>
+                (Unknown name)<br>
+                (Unknown Birthdate)
+            </li>
+        </ul>
+    </div>
+</div>
 {% endblock %}
