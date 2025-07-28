@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="cover-container d-flex w-100 vh-100 p-3 mx-auto flex-column">
+<div class="cover-container d-flex w-100 vh-100 p-4 mx-auto flex-column">
     <header class="m-5 text-end text-sm-center">
         <div class="glow-circle"></div>
         <div class="arrow-container">
@@ -23,8 +23,8 @@
     </main>
 </div>
 
-<div class="container-fluid d-flex w-100 vh-100 p-5 mx-auto gap-4" id="questionnaire">
-    <div class="w-50">
+<div class="container-fluid d-flex w-100 vh-100 p-sm-5 mx-auto gap-4 flex-column flex-md-row" id="questionnaire">
+    <div class="mw-50">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
         <div class="flash-messages">
@@ -35,28 +35,30 @@
         {% endif %}
         {% endwith %}
 
-        <h2 class="mb-4 text-center">Ancestry Questionnaire</h2>
-        <form method="POST" action="{{ url_for('questionnaire') }}">
-            <div class="mb-3">
-                <label for="interest" class="form-label">Your Interest in Ancestry</label>
-                <textarea class="form-control" id="interest" name="interest" rows="3" required></textarea>
-            </div>
+        <div class="glow p-4 rounded">
+            <h2 class="mb-4 text-center">Ancestry Questionnaire</h2>
+            <form method="POST" action="{{ url_for('questionnaire') }}">
+                <div class="mb-3">
+                    <label for="interest" class="form-label">Simulation Interest</label>
+                    <textarea class="form-control" id="interest" name="interest" rows="3" required></textarea>
+                </div>
 
-            <div class="mb-3">
-                <label for="ancestor_name" class="form-label">Ancestor's Name (Optional)</label>
-                <input type="text" class="form-control" id="ancestor_name" name="ancestor_name">
-            </div>
+                <div class="mb-3">
+                    <label for="ancestor_name" class="form-label">Ancestor's Name (Optional)</label>
+                    <input type="text" class="form-control" id="ancestor_name" name="ancestor_name">
+                </div>
 
-            <div class="mb-3">
-                <label for="birth_date" class="form-label">Ancestor's Birth Date (Optional)</label>
-                <input type="date" class="form-control" id="birth_date" name="birth_date">
-            </div>
+                <div class="mb-3">
+                    <label for="birth_date" class="form-label">Ancestor's Birth Date (Optional)</label>
+                    <input type="date" class="form-control" id="birth_date" name="birth_date">
+                </div>
 
-            <button type="submit" class="btn btn-primary">Submit</button>
-        </form>
+                <button type="submit" class="btn btn-primary">Submit</button>
+            </form>
+        </div>
     </div>
 
-    <div class="w-50">
+    <div class="w-auto">
         <h2>Precomiled Simulation Data</h2>
         <ul class="list-group list-group-flush">
             <li class="list-group-item">

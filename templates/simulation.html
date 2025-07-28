@@ -44,15 +44,15 @@
         <h1>Simulation In Progress</h1>
     </header>
 
-    <div id="story-display" class="story-box">
+    <div id="story-display" class="story-box glow">
         <div id="story-content">
             {{ story }}
         </div>
     </div>
 
-    <div id="choices-container" class="choices-container" data-on-load="@get('{{ url_for('updates')}}')">
+    <div id="choices-container" class="choices-container glow" data-on-load="@get('{{ url_for('updates')}}')">
         <legend>You are presented with a choice:</legend>
-        <form id="decision-form" data-on-submit="@post('/simulation', {contentType: 'form'})">
+        <form id="decision-form" data-on-submit="@post('/simulation', {contentType: 'form'})" data-indicator-fetching>
             <fieldset id="decision-fieldset"></fieldset>
         </form>
     </div>
