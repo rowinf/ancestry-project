@@ -38,7 +38,7 @@
         <h2 class="mb-4 text-center">Ancestry Questionnaire</h2>
         <form method="POST" action="{{ url_for('questionnaire') }}">
             <div class="mb-3">
-                <label for="interest" class="form-label">Your Interest in Ancestry</label>
+                <label for="interest" class="form-label">Simulation Interest</label>
                 <textarea class="form-control" id="interest" name="interest" rows="3" required></textarea>
             </div>
 
@@ -52,7 +52,9 @@
                 <input type="date" class="form-control" id="birth_date" name="birth_date">
             </div>
 
-            <button type="submit" class="btn btn-primary">Submit</button>
+            <button type="submit" class="btn btn-primary" id="submitbutton">
+                Submit
+            </button>
         </form>
     </div>
 

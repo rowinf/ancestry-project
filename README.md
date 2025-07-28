@@ -101,7 +101,7 @@ An interactive AI-powered simulation inspired by Assassin's Creed's Animus, wher
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| **Backend** | Flask 3.1+ | Web framework |
+| **Backend** | Quart 3.1+ | Web framework |
 | **AI** | Google Gemini 2.0 Flash | Story generation |
 | **Frontend** | Bootstrap 5.3 | UI framework |
 | **Real-time** | Server-Sent Events | Live updates |
@@ -112,7 +112,7 @@ An interactive AI-powered simulation inspired by Assassin's Creed's Animus, wher
 
 ```
 ancestry-project/
-├── app.py                 # Main Flask application
+├── app.py                 # Main Quart application
 ├── main.py               # Application entry point
 ├── pyproject.toml        # Project configuration
 ├── requirements.txt      # Python dependencies
@@ -131,7 +131,7 @@ ancestry-project/
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `GEMINI_API_KEY` | Your Google Gemini API key | ✅ Yes |
-| `SECRET_KEY` | Flask session secret key | ✅ Yes |
+| `SECRET_KEY` | Quart session secret key | ✅ Yes |
 | `PORT` | Server port (default: 5000) | ❌ No |
 | `HOST` | Server host (default: 127.0.0.1) | ❌ No |
 | `FLASK_ENV` | Set to 'development' for debug mode | ❌ No |
