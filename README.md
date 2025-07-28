@@ -51,25 +51,11 @@ An interactive AI-powered simulation inspired by Assassin's Creed's Animus, wher
 
 3. **Install and run the application**
 
-   **Option A: Using uv run (Recommended - no sync needed)**
-   ```bash
-   # Dependencies will be installed automatically when you run the app
-   uv run main.py
-   ```
-
-   **Option B: Using uv sync first**
+   **Optionally: Using uv sync first**
    ```bash
    uv sync
    uv run main.py
    ```
-
-   **Option C: Using pip**
-   ```bash
-   pip install -r requirements.txt
-   python main.py
-   ```
-
-   **Note**: The `datastar-py` package is automatically installed as it's listed in the project dependencies.
 
 4. **Run the application**
    ```bash
@@ -101,7 +87,7 @@ An interactive AI-powered simulation inspired by Assassin's Creed's Animus, wher
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| **Backend** | Quart 3.1+ | Web framework |
+| **Backend** | Quart | Web framework |
 | **AI** | Google Gemini 2.0 Flash | Story generation |
 | **Frontend** | Bootstrap 5.3 | UI framework |
 | **Real-time** | Server-Sent Events | Live updates |
@@ -115,7 +101,6 @@ ancestry-project/
 ├── app.py                 # Main Quart application
 ├── main.py               # Application entry point
 ├── pyproject.toml        # Project configuration
-├── requirements.txt      # Python dependencies
 ├── .env                  # Environment variables
 ├── templates/
 │   ├── base.html         # Base template
@@ -141,7 +126,7 @@ ancestry-project/
 **Change the AI Model:**
 ```python
 # In app.py, line ~110
-model = genai.GenerativeModel("gemini-2.0-flash")  # Change model here
+model = genai.GenerativeModel("gemini-2.5-flash")  # Change model here
 ```
 
 **Modify Story Length:**
