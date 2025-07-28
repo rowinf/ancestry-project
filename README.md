@@ -1,6 +1,6 @@
 # Ancestor Project (The Animus)
 
-This is the documentation for how to set up and run The Animus. Once running, usage instructions are provided in the browser.
+This is the documentation for how to set up and run Ancestor Project (The Animus). Once running, usage instructions are provided in the browser.
 
 ## Get started
 
