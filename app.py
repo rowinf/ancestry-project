@@ -12,6 +12,9 @@ load_dotenv()
 
 app = Quart(__name__)
 
+MAX_CHOICES = 3
+END_SIMULATION = 'SIMULATION ENDED.'
+
 # Security: Ensure SECRET_KEY is set
 app.secret_key = os.getenv("SECRET_KEY")
 if not app.secret_key:
@@ -122,12 +125,12 @@ async def updates():
             content += '<fieldset id="decision-fieldset">'
             for key, value in choices:
                 sim_state = ""
-                if choice_count == 1:
+                if choice_count < MAX_CHOICES - 1:
                     sim_state = "Simulation middle"
-                elif choice_count == 2:
+                elif choice_count == MAX_CHOICES - 1:
                     sim_state = "Simulation climax"
-                else:
-                    sim_state = "state 'SIMULATION ENDED.' and present no choices"
+                elif choice_count >= MAX_CHOICES:
+                    sim_state = f"state {END_SIMULATION} and present no choices"
                 escaped_value = json.dumps(f"{key} {value.replace('\'', '').replace("\"", '')} ({sim_state})")
                 action = "@post('/updates', {contentType:'form'})"
                 content += f"""
@@ -148,7 +151,7 @@ async def updates():
         model = genai.GenerativeModel("gemini-2.0-flash")
         convo = model.start_chat(history=convo_history)
 
-        if choice_count <= 3:
+        if choice_count <= MAX_CHOICES:
             try:
                 print(decision)
                 convo.send_message(decision)
@@ -162,10 +165,10 @@ async def updates():
                 choice_count = choice_count + 1
                 session['choice_count'] = choice_count
 
-                if "SIMULATION ENDED." in new_story_segment.upper():
+                if END_SIMULATION in new_story_segment.upper():
                     simulation_ended = True
-                elif session['choice_count'] > 3:
-                    new_story_segment += "\n\nSIMULATION ENDED."
+                elif session['choice_count'] > MAX_CHOICES:
+                    new_story_segment += f"\n\n{END_SIMULATION}"
                     simulation_ended = True
                 else:
                     choices = extract_choices(new_story_segment)
@@ -175,10 +178,10 @@ async def updates():
                 new_story_segment = f"\n\nError continuing story: {str(e)}. Simulation ended due to an unexpected error."
                 simulation_ended = True
                 session['story'] = new_story_segment
-                session['choice_count'] = 4
+                session['choice_count'] = MAX_CHOICES + 1
 
         else:
-            new_story_segment = "\n\nSIMULATION ENDED. (No more choices allowed.)"
+            new_story_segment = f"\n\n{END_SIMULATION} (No more choices allowed.)"
             simulation_ended = True
 
     async def event_stream():
@@ -188,7 +191,7 @@ async def updates():
         if simulation_ended:
             yield SSE.patch_elements(f"""
                 <div id="choices-container" class="choices-container">
-                    <p class="mt-4 text-center">SIMULATION ENDED. Thank you for playing!</p>
+                    <p class="mt-4 text-center">{END_SIMULATION} Thank you for playing!</p>
                     <div class="d-flex justify-content-center">
                         <button class="btn btn-success" data-on-click="window.location.href='/'">Start New Simulation</button>
                     </div>
@@ -204,7 +207,7 @@ async def updates():
     return DatastarResponse(event_stream())
 
 def extract_choices(text):
-    if not text or 'SIMULATION ENDED' in text.upper():
+    if not text or END_SIMULATION in text.upper():
         return []
 
     # Split by '---' and get the last part
