@@ -19,7 +19,6 @@ if not app.secret_key:
 
 # Basic session security configuration
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
@@ -35,10 +34,8 @@ SYSTEM_PROMPT = (
     "You will ask me where I want to go in history. From that point on, we enter a simulation mode where you present me "
     "with some context from that part of history along with a couple of choices. "
     "After each story segment, present exactly 3 choices in this format: "
-    "A) Choice 1 B) Choice 2 C) Choice 3 --- "
-    "Every choice I make in the story you will take into account and continue the story, but only three times. "
-    "After I make three choices, the story wraps up and the simulation ends. "
-    "When the simulation ends, clearly state 'SIMULATION ENDED.' at the very end of the story."
+    "A) Choice B) Choice C) Choice --- "
+    "My choices indicate the simulation's progress in (parentheses)"
 )
 
 @app.route('/', methods=['GET', 'POST'])
@@ -57,7 +54,7 @@ async def questionnaire():
         session['interest'] = interest
         session['ancestor_name'] = ancestor_name
         session['birth_date'] = birth_date
-        session['choice_count'] = 0
+        session['choice_count'] = 1
         session['story'] = ""
         session['convo_history'] = []
 
@@ -71,11 +68,10 @@ async def simulation():
     ancestor_name = session.get('ancestor_name')
     birth_date = session.get('birth_date')
     current_story = session.get('story')
-    choice_count = session.get('choice_count', 1)
 
     if not interest:
         flash('Please complete the questionnaire first.', 'warning')
-        return await redirect(url_for('questionnaire'))
+        return redirect(url_for('questionnaire'))
 
     if not current_story:
         user_input = f"""
@@ -83,7 +79,7 @@ async def simulation():
         My ancestor's name is {ancestor_name or 'unknown'} and they were born around {birth_date or 'an unknown time'}.
         """
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash")
+            model = genai.GenerativeModel("gemini-2.5-flash")
             convo = model.start_chat()
             convo.send_message(SYSTEM_PROMPT)
             convo.send_message(user_input)
@@ -104,7 +100,7 @@ async def simulation():
 
     choices = extract_choices(initial_story_segment)
 
-    return await render_template('simulation.html', story=initial_story_segment, choices=choices, choice_count=choice_count)
+    return await render_template('simulation.html', story=initial_story_segment, choices=choices)
 
 @app.route("/updates", methods=['GET', 'POST'])
 async def updates():
@@ -113,6 +109,8 @@ async def updates():
     current_story = session.get('story', '')
     choice_count = session.get('choice_count', 1)
     convo_history = session.get('convo_history', [])
+    print(f"choice_count: {choice_count}")
+        
 
     new_story_segment = ""
     choices_html = ""
@@ -123,7 +121,14 @@ async def updates():
         if choices:
             content += '<fieldset id="decision-fieldset">'
             for key, value in choices:
-                escaped_value = json.dumps(f"{str(choice_count)}: {key} {value.replace('\'', '').replace("\"", '')}")
+                sim_state = ""
+                if choice_count == 1:
+                    sim_state = "Simulation middle"
+                elif choice_count == 2:
+                    sim_state = "Simulation climax"
+                else:
+                    sim_state = "state 'SIMULATION ENDED.' and present no choices"
+                escaped_value = json.dumps(f"{key} {value.replace('\'', '').replace("\"", '')} ({sim_state})")
                 action = "@post('/updates', {contentType:'form'})"
                 content += f"""
                 <div class="form-check">
@@ -137,29 +142,29 @@ async def updates():
         return content
 
     if request.method == 'GET':
-        print(current_story)
         choices = extract_choices(current_story)
-        print(choices)
         choices_html = build_choices_html(choices)
     else:
         model = genai.GenerativeModel("gemini-2.0-flash")
         convo = model.start_chat(history=convo_history)
 
-        if choice_count < 3:
+        if choice_count <= 3:
             try:
+                print(decision)
                 convo.send_message(decision)
                 new_story_segment = convo.last.text
-                session['story'] = current_story + "\n\n" + new_story_segment
-                session['choice_count'] = choice_count + 1
+                session['story'] = new_story_segment
                 # Convert conversation history to simple format for session storage
                 session['convo_history'] = [
                     {"role": m.role, "parts": [{"text": part.text} for part in m.parts]}
-                    for m in convo.history
+                    for m in convo.history[-3:]
                 ]
+                choice_count = choice_count + 1
+                session['choice_count'] = choice_count
 
                 if "SIMULATION ENDED." in new_story_segment.upper():
                     simulation_ended = True
-                elif session['choice_count'] >= 3:
+                elif session['choice_count'] > 3:
                     new_story_segment += "\n\nSIMULATION ENDED."
                     simulation_ended = True
                 else:
@@ -169,8 +174,8 @@ async def updates():
             except Exception as e:
                 new_story_segment = f"\n\nError continuing story: {str(e)}. Simulation ended due to an unexpected error."
                 simulation_ended = True
-                session['story'] = current_story + new_story_segment
-                session['choice_count'] = 3
+                session['story'] = new_story_segment
+                session['choice_count'] = 4
 
         else:
             new_story_segment = "\n\nSIMULATION ENDED. (No more choices allowed.)"
