@@ -4,13 +4,12 @@
   {{ super() }}
   <style>
     .story-box {
+        flex: 1;
         padding: 20px;
         border-radius: 10px;
         margin-bottom: 20px;
         white-space: pre-wrap;
         font-size: 1.4rem;
-        line-height: 1.6;
-        max-height: 40vh;
         overflow-y: auto;
         border: 1px solid #dee2e6;
     }
@@ -51,22 +50,10 @@
         </div>
     </div>
 
-    <div id="choices-container" class="choices-container" data-on-load="@get('{{ url_for('updates')}}')" data-indicator-fetching>
+    <div id="choices-container" class="choices-container" data-on-load="@get('/updates')" data-indicator-fetching>
         <legend>You are presented with a choice: <span data-show="$fetching">Loading...</span></legend>
         <form id="decision-form" data-on-submit="@post('/simulation', {contentType: 'form'})">
             <fieldset id="decision-fieldset">
-                {% for key, value in choices %}
-                <div class="form-check">
-                    <input
-                        class="form-check-input"
-                        type="radio"
-                        name="decision"
-                        id="choice_{{ key }}"
-                        value="{{ key }} {{ value|replace('\'','')|replace('\"','') }}"
-                        data-on-click="@post('/updates', {contentType:'form'})" data-indicator-fetching>
-                    <label class="form-check-label" for="choice_{{ key }}">{{ key }}) {{ value }}</label>
-                </div>
-                {% endfor %}
             </fieldset>
         </form>
     </div>
